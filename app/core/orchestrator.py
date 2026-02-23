@@ -7,8 +7,11 @@ from app.core.event_bus import event_bus
 from app.core.events import SystemEvent, create_event
 from app.core.logger import get_logger
 from app.exchange.mock_exchange import MockExchange
+from app.execution.execution_engine import ExecutionEngine
 from app.portfolio.portfolio_engine import PortfolioEngine
 from app.risk.risk_engine import RiskEngine
+from app.strategy.engine import StrategyEngine
+from app.strategy.strategies.sma import SMAStrategy
 
 
 class ApplicationOrchestrator:
@@ -21,6 +24,12 @@ class ApplicationOrchestrator:
         self.exchange = MockExchange()
         self.risk = RiskEngine()
         self.portfolio_engine = PortfolioEngine(self.exchange)
+
+        self.strategy_engine = StrategyEngine()
+        self.strategy_engine.register(
+            SMAStrategy("BTCUSDT", short_window=5, long_window=15)
+        )
+        self.execution_engine = ExecutionEngine(self.exchange, self.risk)
 
     def start(self):
         self.logger.info("Starting application orchestrator")
@@ -69,15 +78,6 @@ class ApplicationOrchestrator:
     def _heartbeat(self):
 
         price = self.exchange.get_price("BTCUSDT")
-
-        if random.random() < 0.3:
-            side = random.choice(["BUY", "SELL"])
-            quantity = round(random.uniform(0.001, 0.01), 4)  # smaller for risk test
-
-            approved = self.risk.validate_order("BTCUSDT", quantity, price)
-
-            if approved:
-                self.exchange.place_order("BTCUSDT", side, quantity)
 
         event_bus.emit(
             create_event(

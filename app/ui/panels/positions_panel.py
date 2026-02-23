@@ -4,7 +4,7 @@ from rich.table import Table
 
 def render_positions(state: dict):
 
-    table = Table(title="Positions", expand=True)
+    table = Table(expand=True)
     table.add_column("Symbol")
     table.add_column("Qty")
     table.add_column("Entry")
@@ -20,4 +20,4 @@ def render_positions(state: dict):
             str(data["unrealized_pnl"]),
         )
 
-    return Panel(table, border_style="bright_cyan")
+    return Panel(table, title="Positions", border_style="bright_cyan")
