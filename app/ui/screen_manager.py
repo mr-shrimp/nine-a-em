@@ -7,9 +7,10 @@ from rich.live import Live
 from rich.panel import Panel
 
 from app.core.event_bus import event_bus
-from app.core.events import OrderEvent, SignalEvent, SystemEvent
+from app.core.events import MarketDataEvent, OrderEvent, SignalEvent, SystemEvent
 from app.ui.panels.event_log_panel import EventLogPanel
 from app.ui.panels.header_panel import render_header
+from app.ui.panels.market_panel import render_market
 
 
 class ScreenManager:
@@ -24,6 +25,7 @@ class ScreenManager:
         event_bus.subscribe(SystemEvent, self._handle_system_event)
         event_bus.subscribe(SignalEvent, self._handle_signal_event)
         event_bus.subscribe(OrderEvent, self._handle_order_event)
+        event_bus.subscribe(MarketDataEvent, self._handle_market_data)
 
     def _create_layout(self) -> Layout:
         layout = Layout()
@@ -67,8 +69,7 @@ class ScreenManager:
 
     def _render(self):
         self.layout["header"].update(render_header(self.state))
-        # Temporary placeholders
-        self.layout["market"].update(Panel("Market data pending..."))
+        self.layout["market"].update(render_market(self.state))
         self.layout["positions"].update(Panel("No positions."))
         self.layout["performance"].update(Panel("Performance loading..."))
         self.layout["risk"].update(Panel("Risk engine ready."))
@@ -93,3 +94,7 @@ class ScreenManager:
         self.event_log_panel.add_event(
             message, "WARNING" if event.status == "REJECTED" else "INFO"
         )
+
+    def _handle_market_data(self, event: MarketDataEvent):
+        self.state["symbol"] = event.symbol
+        self.state["price"] = event.price

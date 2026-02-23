@@ -32,3 +32,9 @@ class OrderEvent(BaseEvent):
     side: str
     quantity: float
     status: str
+
+
+@dataclass
+class MarketDataEvent(BaseEvent):
+    symbol: str
+    price: float
