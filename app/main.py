@@ -1,8 +1,14 @@
-from app.ui.screen_manager import ScreenManager
-from app.core.config import settings
-from app.core.logger import setup_logging, get_logger
+import signal
+import sys
 
-if __name__ == "__main__":
+from app.core.config import settings
+from app.core.logger import get_logger, setup_logging
+from app.core.orchestrator import ApplicationOrchestrator
+from app.ui.screen_manager import ScreenManager
+
+
+def main():
+
     setup_logging()
     logger = get_logger("main")
 
@@ -12,13 +18,25 @@ if __name__ == "__main__":
     screen.update_state("environment", settings.ENVIRONMENT.value)
     screen.update_state("status", "RUNNING")
 
-    logger.info("Application started")
-    logger.warning("Low liquidity detected on BTC/USDT")
-    logger.error("Failed to fetch market data for ETH/USDT")
+    orchestrator = ApplicationOrchestrator(screen)
 
-    try:
-        screen.start()
-    except KeyboardInterrupt:
+    def shutdown_handler(sig, frame):
+        logger.warning("Shutdown signal received, stopping application")
+        orchestrator.stop()
         screen.stop()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+
+    # 🔥 START ORCHESTRATOR FIRST
+    orchestrator.start()
+
+    # 🔥 THEN BLOCK ON UI
+    screen.start()
+
+
+if __name__ == "__main__":
+    main()
+
 # TO RUN:
 # $env:ENVIRONMENT="DEV"; python -m app.main
