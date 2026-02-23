@@ -7,10 +7,17 @@ from rich.live import Live
 from rich.panel import Panel
 
 from app.core.event_bus import event_bus
-from app.core.events import MarketDataEvent, OrderEvent, SignalEvent, SystemEvent
+from app.core.events import (
+    MarketDataEvent,
+    OrderEvent,
+    PortfolioUpdateEvent,
+    SignalEvent,
+    SystemEvent,
+)
 from app.ui.panels.event_log_panel import EventLogPanel
 from app.ui.panels.header_panel import render_header
 from app.ui.panels.market_panel import render_market
+from app.ui.panels.positions_panel import render_positions
 
 
 class ScreenManager:
@@ -26,6 +33,7 @@ class ScreenManager:
         event_bus.subscribe(SignalEvent, self._handle_signal_event)
         event_bus.subscribe(OrderEvent, self._handle_order_event)
         event_bus.subscribe(MarketDataEvent, self._handle_market_data)
+        event_bus.subscribe(PortfolioUpdateEvent, self._handle_portfolio_update)
 
     def _create_layout(self) -> Layout:
         layout = Layout()
@@ -70,7 +78,7 @@ class ScreenManager:
     def _render(self):
         self.layout["header"].update(render_header(self.state))
         self.layout["market"].update(render_market(self.state))
-        self.layout["positions"].update(Panel("No positions."))
+        self.layout["positions"].update(render_positions(self.state))
         self.layout["performance"].update(Panel("Performance loading..."))
         self.layout["risk"].update(Panel("Risk engine ready."))
         self.layout["event_log"].update(self.event_log_panel.render())
@@ -98,3 +106,11 @@ class ScreenManager:
     def _handle_market_data(self, event: MarketDataEvent):
         self.state["symbol"] = event.symbol
         self.state["price"] = event.price
+
+    def _handle_portfolio_update(self, event: PortfolioUpdateEvent):
+        positions = self.state.setdefault("positions", {})
+        positions[event.symbol] = {
+            "quantity": event.quantity,
+            "entry_price": event.entry_price,
+            "unrealized_pnl": event.unrealized_pnl,
+        }

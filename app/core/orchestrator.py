@@ -7,6 +7,7 @@ from app.core.event_bus import event_bus
 from app.core.events import SystemEvent, create_event
 from app.core.logger import get_logger
 from app.exchange.mock_exchange import MockExchange
+from app.portfolio.portfolio_engine import PortfolioEngine
 
 
 class ApplicationOrchestrator:
@@ -15,7 +16,9 @@ class ApplicationOrchestrator:
         self.screen = screen_manager
         self.running = False
         self.thread = None
+
         self.exchange = MockExchange()
+        self.portfolio_engine = PortfolioEngine(self.exchange)
 
     def start(self):
         self.logger.info("Starting application orchestrator")

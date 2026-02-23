@@ -38,3 +38,11 @@ class OrderEvent(BaseEvent):
 class MarketDataEvent(BaseEvent):
     symbol: str
     price: float
+
+
+@dataclass
+class PortfolioUpdateEvent(BaseEvent):
+    symbol: str
+    quantity: float
+    entry_price: float
+    unrealized_pnl: float
