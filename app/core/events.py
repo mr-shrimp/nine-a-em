@@ -46,3 +46,17 @@ class PortfolioUpdateEvent(BaseEvent):
     quantity: float
     entry_price: float
     unrealized_pnl: float
+
+
+@dataclass
+class TradeClosedEvent(BaseEvent):
+    symbol: str
+    realized_pnl: float
+
+
+@dataclass
+class PerformanceUpdateEvent(BaseEvent):
+    equity: float
+    realized_pnl: float
+    unrealized_pnl: float
+    drawdown_percent: float

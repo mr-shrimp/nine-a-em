@@ -19,6 +19,9 @@ from app.ui.panels.header_panel import render_header
 from app.ui.panels.market_panel import render_market
 from app.ui.panels.positions_panel import render_positions
 
+from app.core.events import PerformanceUpdateEvent, TradeClosedEvent
+from app.ui.panels.performance_panel import render_performance
+
 
 class ScreenManager:
     def __init__(self, refresh_rate: float = 1.0):
@@ -34,6 +37,8 @@ class ScreenManager:
         event_bus.subscribe(OrderEvent, self._handle_order_event)
         event_bus.subscribe(MarketDataEvent, self._handle_market_data)
         event_bus.subscribe(PortfolioUpdateEvent, self._handle_portfolio_update)
+        event_bus.subscribe(PerformanceUpdateEvent, self._handle_performance_update)
+        event_bus.subscribe(TradeClosedEvent, self._handle_trade_closed)
 
     def _create_layout(self) -> Layout:
         layout = Layout()
@@ -79,7 +84,7 @@ class ScreenManager:
         self.layout["header"].update(render_header(self.state))
         self.layout["market"].update(render_market(self.state))
         self.layout["positions"].update(render_positions(self.state))
-        self.layout["performance"].update(Panel("Performance loading..."))
+        self.layout["performance"].update(render_performance(self.state))
         self.layout["risk"].update(Panel("Risk engine ready."))
         self.layout["event_log"].update(self.event_log_panel.render())
         self.layout["footer"].update(Panel("Press Ctrl+C to exit"))
@@ -114,3 +119,17 @@ class ScreenManager:
             "entry_price": event.entry_price,
             "unrealized_pnl": event.unrealized_pnl,
         }
+
+    def _handle_performance_update(self, event: PerformanceUpdateEvent):
+        self.state["performance"] = {
+            "equity": event.equity,
+            "realized_pnl": event.realized_pnl,
+            "unrealized_pnl": event.unrealized_pnl,
+            "drawdown_percent": event.drawdown_percent,
+        }
+
+    def _handle_trade_closed(self, event: TradeClosedEvent):
+        self.event_log_panel.add_event(
+            f"Trade closed {event.symbol} | Realized: {event.realized_pnl}",
+            "WARNING" if event.realized_pnl < 0 else "INFO",
+        )

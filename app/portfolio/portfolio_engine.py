@@ -1,5 +1,11 @@
 from app.core.event_bus import event_bus
-from app.core.events import OrderEvent, PortfolioUpdateEvent, create_event
+from app.core.events import (
+    OrderEvent,
+    PerformanceUpdateEvent,
+    PortfolioUpdateEvent,
+    TradeClosedEvent,
+    create_event,
+)
 from app.core.logger import get_logger
 
 
@@ -8,10 +14,12 @@ class PortfolioEngine:
         self.logger = get_logger("portfolio")
         self.exchange = exchange
 
-        # Minimal position state
-        self.positions = {}  # symbol → dict
+        self.positions = {}
+        self.realized_pnl_total = 0.0
+        self.starting_balance = 100000.0
+        self.equity = self.starting_balance
+        self.peak_equity = self.starting_balance
 
-        # Subscribe to order fills
         event_bus.subscribe(OrderEvent, self._handle_order)
 
     def _handle_order(self, event: OrderEvent):
@@ -27,7 +35,6 @@ class PortfolioEngine:
         position = self.positions.get(symbol)
 
         if not position:
-            # Open new position
             self.positions[symbol] = {
                 "quantity": quantity if side == "BUY" else -quantity,
                 "entry_price": fill_price,
@@ -42,32 +49,47 @@ class PortfolioEngine:
             else:
                 new_qty = old_qty - quantity
 
-            # If crossing zero, treat as close
-            if old_qty != 0 and (old_qty > 0 > new_qty or old_qty < 0 < new_qty):
-                self.logger.info("Position closed", symbol=symbol)
-                new_qty = 0
+            # Position closing logic
+            if old_qty > 0 and new_qty <= 0:
+                realized = (fill_price - old_entry) * abs(old_qty)
+                self._close_position(symbol, realized)
+                return
 
-            if new_qty == 0:
-                position["quantity"] = 0
-                position["entry_price"] = 0
-            else:
-                # Weighted average entry
-                weighted_entry = (
-                    (old_entry * abs(old_qty)) + (fill_price * quantity)
-                ) / (abs(old_qty) + quantity)
+            elif old_qty < 0 and new_qty >= 0:
+                realized = (old_entry - fill_price) * abs(old_qty)
+                self._close_position(symbol, realized)
+                return
 
-                position["quantity"] = new_qty
-                position["entry_price"] = weighted_entry
+            # Otherwise scale position
+            weighted_entry = ((old_entry * abs(old_qty)) + (fill_price * quantity)) / (
+                abs(old_qty) + quantity
+            )
 
-        self._emit_update(symbol)
+            position["quantity"] = new_qty
+            position["entry_price"] = weighted_entry
 
-    def _emit_update(self, symbol):
+        self._emit_portfolio_update(symbol)
+
+    def _close_position(self, symbol, realized):
+
+        self.logger.info("Trade closed", symbol=symbol, realized_pnl=realized)
+
+        self.realized_pnl_total += realized
+        self.positions[symbol] = {"quantity": 0, "entry_price": 0}
+
+        event_bus.emit(
+            create_event(
+                TradeClosedEvent,
+                symbol=symbol,
+                realized_pnl=round(realized, 2),
+            )
+        )
+
+        self._emit_performance_update()
+
+    def _emit_portfolio_update(self, symbol):
 
         position = self.positions.get(symbol)
-
-        if not position:
-            return
-
         quantity = position["quantity"]
         entry_price = position["entry_price"]
 
@@ -75,6 +97,7 @@ class PortfolioEngine:
             unrealized = 0
         else:
             current_price = self.exchange.get_price(symbol)
+
             if quantity > 0:
                 unrealized = (current_price - entry_price) * quantity
             else:
@@ -87,5 +110,42 @@ class PortfolioEngine:
                 quantity=quantity,
                 entry_price=round(entry_price, 2),
                 unrealized_pnl=round(unrealized, 2),
+            )
+        )
+
+        self._emit_performance_update()
+
+    def _emit_performance_update(self):
+
+        total_unrealized = 0
+
+        for symbol, pos in self.positions.items():
+            qty = pos["quantity"]
+            entry = pos["entry_price"]
+
+            if qty == 0:
+                continue
+
+            current_price = self.exchange.get_price(symbol)
+
+            if qty > 0:
+                total_unrealized += (current_price - entry) * qty
+            else:
+                total_unrealized += (entry - current_price) * abs(qty)
+
+        self.equity = self.starting_balance + self.realized_pnl_total + total_unrealized
+
+        if self.equity > self.peak_equity:
+            self.peak_equity = self.equity
+
+        drawdown = ((self.peak_equity - self.equity) / self.peak_equity) * 100
+
+        event_bus.emit(
+            create_event(
+                PerformanceUpdateEvent,
+                equity=round(self.equity, 2),
+                realized_pnl=round(self.realized_pnl_total, 2),
+                unrealized_pnl=round(total_unrealized, 2),
+                drawdown_percent=round(drawdown, 2),
             )
         )
