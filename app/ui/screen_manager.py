@@ -6,21 +6,25 @@ from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
 
+from app.core.config import settings
 from app.core.event_bus import event_bus
 from app.core.events import (
     MarketDataEvent,
     OrderEvent,
+    PerformanceUpdateEvent,
     PortfolioUpdateEvent,
+    RiskStatusEvent,
+    RiskViolationEvent,
     SignalEvent,
     SystemEvent,
+    TradeClosedEvent,
 )
 from app.ui.panels.event_log_panel import EventLogPanel
 from app.ui.panels.header_panel import render_header
 from app.ui.panels.market_panel import render_market
-from app.ui.panels.positions_panel import render_positions
-
-from app.core.events import PerformanceUpdateEvent, TradeClosedEvent
 from app.ui.panels.performance_panel import render_performance
+from app.ui.panels.positions_panel import render_positions
+from app.ui.panels.risk_panel import render_risk
 
 
 class ScreenManager:
@@ -39,6 +43,8 @@ class ScreenManager:
         event_bus.subscribe(PortfolioUpdateEvent, self._handle_portfolio_update)
         event_bus.subscribe(PerformanceUpdateEvent, self._handle_performance_update)
         event_bus.subscribe(TradeClosedEvent, self._handle_trade_closed)
+        event_bus.subscribe(RiskViolationEvent, self._handle_risk_violation)
+        event_bus.subscribe(RiskStatusEvent, self._handle_risk_status)
 
     def _create_layout(self) -> Layout:
         layout = Layout()
@@ -85,7 +91,7 @@ class ScreenManager:
         self.layout["market"].update(render_market(self.state))
         self.layout["positions"].update(render_positions(self.state))
         self.layout["performance"].update(render_performance(self.state))
-        self.layout["risk"].update(Panel("Risk engine ready."))
+        self.layout["risk"].update(render_risk(self.state))
         self.layout["event_log"].update(self.event_log_panel.render())
         self.layout["footer"].update(Panel("Press Ctrl+C to exit"))
 
@@ -133,3 +139,18 @@ class ScreenManager:
             f"Trade closed {event.symbol} | Realized: {event.realized_pnl}",
             "WARNING" if event.realized_pnl < 0 else "INFO",
         )
+
+    def _handle_risk_violation(self, event: RiskViolationEvent):
+        self.event_log_panel.add_event(
+            f"RISK VIOLATION: {event.reason}", event.severity
+        )
+
+    def _handle_risk_status(self, event: RiskStatusEvent):
+        self.state["risk"] = {
+            "equity": event.equity,
+            "drawdown_percent": event.drawdown_percent,
+            "daily_loss_percent": event.daily_loss_percent,
+            "status": event.status,
+            "max_drawdown_limit": settings.MAX_ACCOUNT_DRAWDOWN_PERCENT,
+            "max_daily_loss_limit": settings.MAX_DAILY_LOSS_PERCENT,
+        }

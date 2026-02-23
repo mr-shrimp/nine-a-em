@@ -60,3 +60,17 @@ class PerformanceUpdateEvent(BaseEvent):
     realized_pnl: float
     unrealized_pnl: float
     drawdown_percent: float
+
+
+@dataclass
+class RiskViolationEvent(BaseEvent):
+    reason: str
+    severity: str
+
+
+@dataclass
+class RiskStatusEvent(BaseEvent):
+    equity: float
+    drawdown_percent: float
+    daily_loss_percent: float
+    status: str

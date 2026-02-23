@@ -8,6 +8,7 @@ from app.core.events import SystemEvent, create_event
 from app.core.logger import get_logger
 from app.exchange.mock_exchange import MockExchange
 from app.portfolio.portfolio_engine import PortfolioEngine
+from app.risk.risk_engine import RiskEngine
 
 
 class ApplicationOrchestrator:
@@ -18,6 +19,7 @@ class ApplicationOrchestrator:
         self.thread = None
 
         self.exchange = MockExchange()
+        self.risk = RiskEngine()
         self.portfolio_engine = PortfolioEngine(self.exchange)
 
     def start(self):
@@ -65,13 +67,17 @@ class ApplicationOrchestrator:
         self.logger.info("Main loop exited")
 
     def _heartbeat(self):
+
         price = self.exchange.get_price("BTCUSDT")
 
-        if random.random() < 0.3:  # 30% chance to place order
+        if random.random() < 0.3:
             side = random.choice(["BUY", "SELL"])
-            quantity = round(random.uniform(0.01, 0.1), 4)
+            quantity = round(random.uniform(0.001, 0.01), 4)  # smaller for risk test
 
-            self.exchange.place_order("BTCUSDT", side, quantity)
+            approved = self.risk.validate_order("BTCUSDT", quantity, price)
+
+            if approved:
+                self.exchange.place_order("BTCUSDT", side, quantity)
 
         event_bus.emit(
             create_event(
